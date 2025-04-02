@@ -61,25 +61,26 @@ const createPayment = asyncHandler(async (req, res) => {
 
   if (!studentId || !amount || !paymentType || !paymentMethod) {
     res.status(400);
-    throw new Error('Please fill in all required fields');
+    throw new Error('Por favor complete todos los campos requeridos');
   }
 
   const student = await Student.findById(studentId);
   if (!student) {
     res.status(404);
-    throw new Error('Student not found');
+    throw new Error('Estudiante no encontrado');
   }
 
   // Check if user has permission to process payment for this student
   if (req.user.role !== 'admin' && student.gym !== req.user.assignedGym) {
     res.status(401);
-    throw new Error('Not authorized to process payment for this student');
+    throw new Error('No autorizado para procesar pagos para este estudiante');
   }
 
   // Calculate next payment date based on payment type and payment date
   const currentPaymentDate = paymentDate ? new Date(paymentDate) : new Date();
   const nextPaymentDate = calculateNextPaymentDate(currentPaymentDate, paymentType);
 
+  // Create payment
   const payment = await Payment.create({
     student: studentId,
     amount,
@@ -87,18 +88,23 @@ const createPayment = asyncHandler(async (req, res) => {
     paymentMethod,
     comments,
     gym: student.gym,
-    processedBy: req.user.id,
+    processedBy: req.user._id,
     paymentDate: currentPaymentDate,
   });
 
   if (payment) {
     // Update student's last payment date and next payment date
-    await Student.findByIdAndUpdate(studentId, {
-      lastPayment: currentPaymentDate,
-      nextPaymentDate: nextPaymentDate,
-      status: 'active',
-    });
+    const updatedStudent = await Student.findByIdAndUpdate(
+      studentId,
+      {
+        lastPayment: currentPaymentDate,
+        nextPaymentDate: nextPaymentDate,
+        status: 'active',
+      },
+      { new: true }
+    );
 
+    // Return payment with populated fields
     const populatedPayment = await Payment.findById(payment._id)
       .populate('student', 'name phone')
       .populate('processedBy', 'name');
@@ -106,7 +112,7 @@ const createPayment = asyncHandler(async (req, res) => {
     res.status(201).json(populatedPayment);
   } else {
     res.status(400);
-    throw new Error('Invalid payment data');
+    throw new Error('Error al procesar el pago');
   }
 });
 
@@ -120,13 +126,13 @@ const getPaymentById = asyncHandler(async (req, res) => {
 
   if (!payment) {
     res.status(404);
-    throw new Error('Payment not found');
+    throw new Error('Pago no encontrado');
   }
 
   // Check if user has permission to view this payment
   if (req.user.role !== 'admin' && payment.gym !== req.user.assignedGym) {
     res.status(401);
-    throw new Error('Not authorized to view this payment');
+    throw new Error('No autorizado para ver este pago');
   }
 
   res.json(payment);

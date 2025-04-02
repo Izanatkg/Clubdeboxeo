@@ -37,14 +37,14 @@ const createStudent = asyncHandler(async (req, res) => {
 
   if (!name || !phone || !gym || !membershipType) {
     res.status(400);
-    throw new Error('Please fill in all required fields');
+    throw new Error('Por favor complete todos los campos requeridos');
   }
 
   // Check if student with same phone exists
   const studentExists = await Student.findOne({ phone });
   if (studentExists) {
     res.status(400);
-    throw new Error('Student with this phone number already exists');
+    throw new Error('Ya existe un estudiante con este número de teléfono');
   }
 
   const student = await Student.create({
@@ -61,7 +61,7 @@ const createStudent = asyncHandler(async (req, res) => {
     res.status(201).json(student);
   } else {
     res.status(400);
-    throw new Error('Invalid student data');
+    throw new Error('Datos de estudiante inválidos');
   }
 });
 
@@ -73,13 +73,13 @@ const updateStudent = asyncHandler(async (req, res) => {
 
   if (!student) {
     res.status(404);
-    throw new Error('Student not found');
+    throw new Error('Estudiante no encontrado');
   }
 
   // Check if user has permission to update this student
   if (req.user.role !== 'admin' && student.gym !== req.user.assignedGym) {
     res.status(401);
-    throw new Error('Not authorized to update this student');
+    throw new Error('No autorizado para actualizar este estudiante');
   }
 
   const updatedStudent = await Student.findByIdAndUpdate(
@@ -99,17 +99,17 @@ const deleteStudent = asyncHandler(async (req, res) => {
 
   if (!student) {
     res.status(404);
-    throw new Error('Student not found');
+    throw new Error('Estudiante no encontrado');
   }
 
   // Check if user has permission to delete this student
   if (req.user.role !== 'admin' && student.gym !== req.user.assignedGym) {
     res.status(401);
-    throw new Error('Not authorized to delete this student');
+    throw new Error('No autorizado para eliminar este estudiante');
   }
 
-  await student.remove();
-  res.json({ id: req.params.id });
+  await student.deleteOne();
+  res.json({ id: req.params.id, message: 'Estudiante eliminado exitosamente' });
 });
 
 // @desc    Get student by ID
@@ -120,13 +120,13 @@ const getStudentById = asyncHandler(async (req, res) => {
 
   if (!student) {
     res.status(404);
-    throw new Error('Student not found');
+    throw new Error('Estudiante no encontrado');
   }
 
   // Check if user has permission to view this student
   if (req.user.role !== 'admin' && student.gym !== req.user.assignedGym) {
     res.status(401);
-    throw new Error('Not authorized to view this student');
+    throw new Error('No autorizado para ver este estudiante');
   }
 
   res.json(student);
