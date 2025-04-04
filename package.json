@@ -1,30 +1,48 @@
 {
-  "name": "club-boxeo-app",
-  "version": "1.0.0",
-  "description": "Sistema de gestión para club de boxeo",
-  "main": "index.js",
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
   "scripts": {
-    "start": "node backend/server.js",
-    "server": "nodemon backend/server.js",
-    "client": "npm start --prefix frontend",
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "install-client": "cd frontend && npm install",
-    "install-server": "npm install",
-    "install": "npm run install-server && npm run install-client",
-    "seed": "node backend/seeder.js"
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.1",
-    "express": "^4.18.2",
-    "express-async-handler": "^1.2.0",
-    "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.1.1",
-    "multer": "^1.4.5-lts.1"
+    "@emotion/react": "^11.11.3",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.15.10",
+    "@mui/material": "^5.15.10",
+    "@reduxjs/toolkit": "^2.2.1",
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^13.5.0",
+    "axios": "^1.6.7",
+    "date-fns": "^2.30.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-redux": "^9.1.0",
+    "react-router-dom": "^6.22.1",
+    "react-scripts": "5.0.1",
+    "react-toastify": "^10.0.4",
+    "web-vitals": "^2.1.4"
   },
-  "devDependencies": {
-    "concurrently": "^8.2.2",
-    "nodemon": "^3.0.3"
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   }
 }
