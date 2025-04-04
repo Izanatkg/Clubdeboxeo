@@ -1,211 +1,90 @@
-const asyncHandler = require('express-async-handler');
 const Sale = require('../models/saleModel');
 const Product = require('../models/productModel');
-
-// @desc    Get all sales
-// @route   GET /api/sales
-// @access  Private
-const getSales = asyncHandler(async (req, res) => {
-  const { startDate, endDate, gym } = req.query;
-  let query = {};
-
-  // Filter by gym if user is not admin
-  if (req.user.role !== 'admin') {
-    query.gym = req.user.assignedGym;
-  } else if (gym) {
-    query.gym = gym;
-  }
-
-  // Filter by date range if provided
-  if (startDate && endDate) {
-    query.createdAt = {
-      $gte: new Date(startDate),
-      $lte: new Date(endDate),
-    };
-  }
-
-  const sales = await Sale.find(query)
-    .populate('items.product', 'name price')
-    .populate('customer', 'name phone')
-    .populate('processedBy', 'name')
-    .sort({ createdAt: -1 });
-
-  res.json(sales);
-});
 
 // @desc    Create new sale
 // @route   POST /api/sales
 // @access  Private
-const createSale = asyncHandler(async (req, res) => {
-  const { items, paymentMethod, customerId, installments } = req.body;
+const createSale = async (req, res) => {
+  try {
+    const { productId, quantity, location } = req.body;
+    console.log('Datos recibidos:', { productId, quantity, location });
 
-  if (!items || items.length === 0 || !paymentMethod) {
-    res.status(400);
-    throw new Error('Please provide items and payment method');
-  }
-
-  // Calculate total and validate stock
-  let total = 0;
-  for (const item of items) {
-    const product = await Product.findById(item.product);
+    const product = await Product.findById(productId);
     if (!product) {
-      res.status(404);
-      throw new Error(`Product not found: ${item.product}`);
+      console.log('Producto no encontrado');
+      return res.status(404).json({ message: 'Producto no encontrado' });
     }
 
-    // Check stock availability
-    const currentStock = product.stock.get(req.user.assignedGym) || 0;
-    if (currentStock < item.quantity) {
-      res.status(400);
-      throw new Error(`Insufficient stock for product: ${product.name}`);
+    console.log('Stock actual:', product.stock);
+
+    // Verificar que el producto tenga stock
+    if (!product.stock || typeof product.stock.get !== 'function') {
+      console.log('Error en formato de stock:', product.stock);
+      return res.status(400).json({ message: 'Error en el formato del stock' });
     }
 
-    total += product.price * item.quantity;
-  }
-
-  // Validate installments if payment method is installments
-  if (paymentMethod === 'installments') {
-    if (!installments || installments.length === 0) {
-      res.status(400);
-      throw new Error('Please provide installment details');
+    // Si no se especifica ubicación, usar la primera disponible con stock
+    let selectedLocation = location;
+    if (!selectedLocation) {
+      const locations = Array.from(product.stock.keys());
+      selectedLocation = locations.find(loc => (product.stock.get(loc) || 0) > 0);
+      if (!selectedLocation) {
+        console.log('No hay stock disponible en ninguna ubicación');
+        return res.status(400).json({ message: 'No hay stock disponible' });
+      }
     }
 
-    const installmentsTotal = installments.reduce((sum, inst) => sum + inst.amount, 0);
-    if (installmentsTotal !== total) {
-      res.status(400);
-      throw new Error('Installments total does not match sale total');
-    }
-  }
+    const currentStock = product.stock.get(selectedLocation) || 0;
+    console.log('Stock en ubicación:', { selectedLocation, currentStock });
 
-  // Create sale
-  const sale = await Sale.create({
-    items: items.map(item => ({
-      product: item.product,
-      quantity: item.quantity,
-      price: item.price,
-    })),
-    total,
-    gym: req.user.assignedGym,
-    paymentMethod,
-    customer: customerId,
-    processedBy: req.user.id,
-    installments: paymentMethod === 'installments' ? installments : [],
-  });
-
-  if (sale) {
-    // Update stock for each product
-    for (const item of items) {
-      const product = await Product.findById(item.product);
-      const currentStock = product.stock.get(req.user.assignedGym) || 0;
-      product.stock.set(req.user.assignedGym, currentStock - item.quantity);
-      await product.save();
+    // Verificar stock en la ubicación seleccionada
+    if (currentStock < quantity) {
+      console.log('Stock insuficiente:', { currentStock, requested: quantity });
+      return res.status(400).json({ message: 'Stock insuficiente en la ubicación seleccionada' });
     }
 
-    const populatedSale = await Sale.findById(sale._id)
-      .populate('items.product', 'name price')
-      .populate('customer', 'name phone')
-      .populate('processedBy', 'name');
+    // Calcular total
+    const total = product.price * quantity;
 
+    // Crear venta
+    const sale = await Sale.create({
+      product: productId,
+      quantity,
+      total,
+    });
+
+    // Actualizar stock
+    product.stock.set(selectedLocation, currentStock - quantity);
+    await product.save();
+
+    console.log('Venta creada:', sale);
+    console.log('Stock actualizado:', product.stock);
+
+    // Devolver la venta con los datos del producto
+    const populatedSale = await Sale.findById(sale._id).populate('product', 'name price');
     res.status(201).json(populatedSale);
-  } else {
-    res.status(400);
-    throw new Error('Invalid sale data');
+  } catch (error) {
+    console.error('Error en createSale:', error);
+    res.status(500).json({ message: 'Error al procesar la venta: ' + error.message });
   }
-});
+};
 
-// @desc    Get sale by ID
-// @route   GET /api/sales/:id
+// @desc    Get sales
+// @route   GET /api/sales
 // @access  Private
-const getSaleById = asyncHandler(async (req, res) => {
-  const sale = await Sale.findById(req.params.id)
-    .populate('items.product', 'name price')
-    .populate('customer', 'name phone')
-    .populate('processedBy', 'name');
-
-  if (!sale) {
-    res.status(404);
-    throw new Error('Sale not found');
+const getSales = async (req, res) => {
+  try {
+    const sales = await Sale.find()
+      .populate('product', 'name price')
+      .sort({ date: -1 });
+    res.json(sales);
+  } catch (error) {
+    console.error('Error en getSales:', error);
+    res.status(500).json({ message: 'Error al obtener las ventas' });
   }
-
-  // Check if user has permission to view this sale
-  if (req.user.role !== 'admin' && sale.gym !== req.user.assignedGym) {
-    res.status(401);
-    throw new Error('Not authorized to view this sale');
-  }
-
-  res.json(sale);
-});
-
-// @desc    Update installment payment
-// @route   PUT /api/sales/:id/installments/:installmentId
-// @access  Private
-const updateInstallment = asyncHandler(async (req, res) => {
-  const sale = await Sale.findById(req.params.id);
-
-  if (!sale) {
-    res.status(404);
-    throw new Error('Sale not found');
-  }
-
-  // Check if user has permission to update this sale
-  if (req.user.role !== 'admin' && sale.gym !== req.user.assignedGym) {
-    res.status(401);
-    throw new Error('Not authorized to update this sale');
-  }
-
-  const installment = sale.installments.id(req.params.installmentId);
-  if (!installment) {
-    res.status(404);
-    throw new Error('Installment not found');
-  }
-
-  installment.paid = true;
-  installment.paidDate = new Date();
-  await sale.save();
-
-  res.json(sale);
-});
-
-// @desc    Get sales summary
-// @route   GET /api/sales/summary
-// @access  Private
-const getSalesSummary = asyncHandler(async (req, res) => {
-  const { startDate, endDate, gym } = req.query;
-  let query = {};
-
-  // Filter by gym if user is not admin
-  if (req.user.role !== 'admin') {
-    query.gym = req.user.assignedGym;
-  } else if (gym) {
-    query.gym = gym;
-  }
-
-  // Filter by date range if provided
-  if (startDate && endDate) {
-    query.createdAt = {
-      $gte: new Date(startDate),
-      $lte: new Date(endDate),
-    };
-  }
-
-  const summary = await Sale.aggregate([
-    { $match: query },
-    {
-      $group: {
-        _id: '$paymentMethod',
-        total: { $sum: '$total' },
-        count: { $sum: 1 },
-      },
-    },
-  ]);
-
-  res.json(summary);
-});
+};
 
 module.exports = {
-  getSales,
   createSale,
-  getSaleById,
-  updateInstallment,
-  getSalesSummary,
+  getSales,
 };

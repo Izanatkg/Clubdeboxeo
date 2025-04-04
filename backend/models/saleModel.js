@@ -1,70 +1,23 @@
 const mongoose = require('mongoose');
 
-const saleItemSchema = mongoose.Schema({
+const saleSchema = mongoose.Schema({
   product: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
-    ref: 'Product',
+    ref: 'Product'
   },
   quantity: {
     type: Number,
-    required: true,
+    required: true
   },
-  price: {
+  total: {
     type: Number,
-    required: true,
+    required: true
   },
-});
-
-const installmentSchema = mongoose.Schema({
-  amount: {
-    type: Number,
-    required: true,
-  },
-  dueDate: {
+  date: {
     type: Date,
-    required: true,
-  },
-  paid: {
-    type: Boolean,
-    default: false,
-  },
-  paidDate: {
-    type: Date,
-  },
-});
-
-const saleSchema = mongoose.Schema(
-  {
-    items: [saleItemSchema],
-    total: {
-      type: Number,
-      required: true,
-    },
-    gym: {
-      type: String,
-      enum: ['Villas del Parque', 'UAN', 'Platinum'],
-      required: true,
-    },
-    paymentMethod: {
-      type: String,
-      enum: ['cash', 'card', 'installments'],
-      required: true,
-    },
-    customer: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Student',
-    },
-    processedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      required: true,
-      ref: 'User',
-    },
-    installments: [installmentSchema],
-  },
-  {
-    timestamps: true,
+    default: Date.now
   }
-);
+});
 
 module.exports = mongoose.model('Sale', saleSchema);
