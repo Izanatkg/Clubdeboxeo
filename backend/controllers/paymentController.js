@@ -27,7 +27,7 @@ const calculateNextPaymentDate = (currentDate, paymentType) => {
 // @route   GET /api/payments
 // @access  Private
 const getPayments = asyncHandler(async (req, res) => {
-  const { startDate, endDate, gym } = req.query;
+  const { startDate, endDate, paymentType, paymentMethod, gym } = req.query;
   let query = {};
 
   // Filter by gym if user is not admin
@@ -39,81 +39,89 @@ const getPayments = asyncHandler(async (req, res) => {
 
   // Filter by date range if provided
   if (startDate && endDate) {
-    query.createdAt = {
+    query.paymentDate = {
       $gte: new Date(startDate),
       $lte: new Date(endDate),
     };
   }
 
-  const payments = await Payment.find(query)
-    .populate('student', 'name phone')
-    .populate('processedBy', 'name')
-    .sort({ createdAt: -1 });
+  // Filter by payment type if provided
+  if (paymentType) {
+    query.paymentType = paymentType;
+  }
 
-  res.json(payments);
+  // Filter by payment method if provided
+  if (paymentMethod) {
+    query.paymentMethod = paymentMethod;
+  }
+
+  // Get all payments and check for valid student references
+  const payments = await Payment.find(query)
+    .populate({
+      path: 'student',
+      select: 'name',
+      match: { _id: { $exists: true } } // Solo estudiantes que existen
+    })
+    .populate('processedBy', 'name')
+    .sort({ paymentDate: -1 });
+
+  // Limpiar pagos con referencias rotas
+  const validPayments = payments.filter(payment => payment.student !== null);
+
+  // Si hay pagos inválidos, eliminarlos
+  const invalidPayments = payments.filter(payment => payment.student === null);
+  if (invalidPayments.length > 0) {
+    await Payment.deleteMany({
+      _id: { $in: invalidPayments.map(p => p._id) }
+    });
+  }
+
+  res.json(validPayments);
 });
 
 // @desc    Create new payment
 // @route   POST /api/payments
 // @access  Private
 const createPayment = asyncHandler(async (req, res) => {
-  const { studentId, amount, paymentType, paymentMethod, comments, paymentDate } = req.body;
+  const { student, amount, paymentType, paymentMethod, comments, paymentDate } = req.body;
 
-  if (!studentId || !amount || !paymentType || !paymentMethod) {
+  // Validate required fields
+  if (!student || !amount || !paymentType || !paymentMethod) {
     res.status(400);
     throw new Error('Por favor complete todos los campos requeridos');
   }
 
-  const student = await Student.findById(studentId);
-  if (!student) {
+  // Validate student exists
+  const studentExists = await Student.findById(student);
+  if (!studentExists) {
     res.status(404);
     throw new Error('Estudiante no encontrado');
   }
 
-  // Check if user has permission to process payment for this student
-  if (req.user.role !== 'admin' && student.gym !== req.user.assignedGym) {
-    res.status(401);
-    throw new Error('No autorizado para procesar pagos para este estudiante');
-  }
-
-  // Calculate next payment date based on payment type and payment date
-  const currentPaymentDate = paymentDate ? new Date(paymentDate) : new Date();
-  const nextPaymentDate = calculateNextPaymentDate(currentPaymentDate, paymentType);
-
   // Create payment
   const payment = await Payment.create({
-    student: studentId,
+    student,
     amount,
     paymentType,
     paymentMethod,
     comments,
-    gym: student.gym,
+    gym: req.user.assignedGym,
     processedBy: req.user._id,
-    paymentDate: currentPaymentDate,
+    paymentDate: paymentDate || new Date(),
   });
 
-  if (payment) {
-    // Update student's last payment date and next payment date
-    const updatedStudent = await Student.findByIdAndUpdate(
-      studentId,
-      {
-        lastPayment: currentPaymentDate,
-        nextPaymentDate: nextPaymentDate,
-        status: 'active',
-      },
-      { new: true }
-    );
+  // Populate the payment with student and processedBy details
+  const populatedPayment = await Payment.findById(payment._id)
+    .populate('student', 'name')
+    .populate('processedBy', 'name');
 
-    // Return payment with populated fields
-    const populatedPayment = await Payment.findById(payment._id)
-      .populate('student', 'name phone')
-      .populate('processedBy', 'name');
+  // Update student's payment dates
+  await Student.findByIdAndUpdate(student, {
+    lastPaymentDate: payment.paymentDate,
+    nextPaymentDate: calculateNextPaymentDate(payment.paymentDate, paymentType),
+  });
 
-    res.status(201).json(populatedPayment);
-  } else {
-    res.status(400);
-    throw new Error('Error al procesar el pago');
-  }
+  res.status(201).json(populatedPayment);
 });
 
 // @desc    Get payment by ID
@@ -174,9 +182,62 @@ const getPaymentSummary = asyncHandler(async (req, res) => {
   res.json(summary);
 });
 
+// @desc    Delete payment
+// @route   DELETE /api/payments/:id
+// @access  Private
+const deletePayment = asyncHandler(async (req, res) => {
+  const payment = await Payment.findById(req.params.id)
+    .populate('student', 'name lastPaymentDate nextPaymentDate')
+    .populate('processedBy', 'name');
+
+  if (!payment) {
+    res.status(404);
+    throw new Error('Pago no encontrado');
+  }
+
+  // Check if user has permission to delete this payment
+  if (req.user.role !== 'admin' && payment.gym !== req.user.assignedGym) {
+    res.status(401);
+    throw new Error('No autorizado para eliminar este pago');
+  }
+
+  // Si el estudiante existe, actualiza sus fechas de pago
+  if (payment.student && payment.student._id) {
+    // Get all payments for this student, ordered by date
+    const studentPayments = await Payment.find({ 
+      student: payment.student._id,
+      _id: { $ne: payment._id } // Excluir el pago que vamos a eliminar
+    }).sort({ paymentDate: -1 });
+
+    // Update student's payment dates based on the most recent remaining payment
+    if (studentPayments.length > 0) {
+      const latestPayment = studentPayments[0];
+      await Student.findByIdAndUpdate(payment.student._id, {
+        lastPaymentDate: latestPayment.paymentDate,
+        nextPaymentDate: calculateNextPaymentDate(
+          latestPayment.paymentDate,
+          latestPayment.paymentType
+        ),
+      });
+    } else {
+      // If no other payments exist, reset payment dates
+      await Student.findByIdAndUpdate(payment.student._id, {
+        lastPaymentDate: null,
+        nextPaymentDate: null,
+      });
+    }
+  }
+
+  // Delete the payment
+  await payment.deleteOne();
+
+  res.json({ id: req.params.id, message: 'Pago eliminado exitosamente' });
+});
+
 module.exports = {
   getPayments,
   createPayment,
   getPaymentById,
   getPaymentSummary,
+  deletePayment,
 };

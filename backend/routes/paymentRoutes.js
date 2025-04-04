@@ -5,6 +5,7 @@ const {
   createPayment,
   getPaymentById,
   getPaymentSummary,
+  deletePayment,
 } = require('../controllers/paymentController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -14,5 +15,6 @@ router.route('/')
 
 router.get('/summary', protect, getPaymentSummary);
 router.get('/:id', protect, getPaymentById);
+router.delete('/:id', protect, deletePayment);
 
 module.exports = router;
