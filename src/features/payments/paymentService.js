@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:5000/api/payments/';
+const API_URL = '/api/payments/';
 
 // Get all payments
 const getPayments = async (token, filters = {}) => {
