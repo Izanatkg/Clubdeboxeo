@@ -13,4 +13,5 @@ export const store = configureStore({
     products: productReducer,
     sales: salesReducer,
   },
+  devTools: process.env.NODE_ENV !== 'production',
 });
