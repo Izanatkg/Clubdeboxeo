@@ -83,43 +83,46 @@ const getPayments = asyncHandler(async (req, res) => {
 // @route   POST /api/payments
 // @access  Private
 const createPayment = asyncHandler(async (req, res) => {
-  const { student, amount, paymentType, paymentMethod, comments, paymentDate } = req.body;
+  const { student: studentId, amount, paymentType, paymentMethod, comments } = req.body;
+  const paymentDate = new Date(req.body.paymentDate || Date.now());
 
   // Validate required fields
-  if (!student || !amount || !paymentType || !paymentMethod) {
+  if (!studentId || !amount || !paymentType || !paymentMethod) {
     res.status(400);
     throw new Error('Por favor complete todos los campos requeridos');
   }
 
   // Validate student exists
-  const studentExists = await Student.findById(student);
-  if (!studentExists) {
+  const student = await Student.findById(studentId);
+  if (!student) {
     res.status(404);
     throw new Error('Estudiante no encontrado');
   }
 
   // Create payment
   const payment = await Payment.create({
-    student,
+    student: studentId,
     amount,
     paymentType,
     paymentMethod,
     comments,
-    gym: req.user.assignedGym,
+    paymentDate,
     processedBy: req.user._id,
-    paymentDate: paymentDate || new Date(),
+    gym: student.gym,
   });
 
-  // Populate the payment with student and processedBy details
+  // Update student's payment information
+  const nextPaymentDate = calculateNextPaymentDate(paymentDate, paymentType);
+  await Student.findByIdAndUpdate(studentId, {
+    lastPayment: paymentDate,
+    nextPaymentDate: nextPaymentDate,
+    status: 'active'
+  });
+
+  // Return payment with populated fields
   const populatedPayment = await Payment.findById(payment._id)
     .populate('student', 'name')
     .populate('processedBy', 'name');
-
-  // Update student's payment dates
-  await Student.findByIdAndUpdate(student, {
-    lastPaymentDate: payment.paymentDate,
-    nextPaymentDate: calculateNextPaymentDate(payment.paymentDate, paymentType),
-  });
 
   res.status(201).json(populatedPayment);
 });
