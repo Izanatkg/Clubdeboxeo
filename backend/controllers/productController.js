@@ -5,11 +5,15 @@ const Product = require('../models/productModel');
 // @route   GET /api/products
 // @access  Private
 const getProducts = asyncHandler(async (req, res) => {
-  const { type } = req.query;
+  const { type, search } = req.query;
   let query = {};
 
   if (type) {
     query.type = type;
+  }
+
+  if (search) {
+    query.name = { $regex: search, $options: 'i' };
   }
 
   const products = await Product.find(query).sort({ name: 1 });
@@ -18,19 +22,19 @@ const getProducts = asyncHandler(async (req, res) => {
 
 // @desc    Create new product
 // @route   POST /api/products
-// @access  Private/Admin
+// @access  Private
 const createProduct = asyncHandler(async (req, res) => {
   const { name, type, price, description, allowInstallments } = req.body;
 
   if (!name || !type || !price) {
     res.status(400);
-    throw new Error('Please fill in all required fields');
+    throw new Error('Por favor complete todos los campos requeridos');
   }
 
   const product = await Product.create({
     name,
     type,
-    price,
+    price: Number(price),
     description,
     allowInstallments: allowInstallments || false,
     stock: {
@@ -44,29 +48,27 @@ const createProduct = asyncHandler(async (req, res) => {
     res.status(201).json(product);
   } else {
     res.status(400);
-    throw new Error('Invalid product data');
+    throw new Error('Datos de producto inválidos');
   }
 });
 
 // @desc    Update product
 // @route   PUT /api/products/:id
-// @access  Private/Admin
+// @access  Private
 const updateProduct = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
 
   if (!product) {
     res.status(404);
-    throw new Error('Product not found');
-  }
-
-  if (req.user.role !== 'admin') {
-    res.status(401);
-    throw new Error('Not authorized to update products');
+    throw new Error('Producto no encontrado');
   }
 
   const updatedProduct = await Product.findByIdAndUpdate(
     req.params.id,
-    req.body,
+    {
+      ...req.body,
+      price: Number(req.body.price)
+    },
     { new: true }
   );
 
@@ -75,21 +77,16 @@ const updateProduct = asyncHandler(async (req, res) => {
 
 // @desc    Delete product
 // @route   DELETE /api/products/:id
-// @access  Private/Admin
+// @access  Private
 const deleteProduct = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
 
   if (!product) {
     res.status(404);
-    throw new Error('Product not found');
+    throw new Error('Producto no encontrado');
   }
 
-  if (req.user.role !== 'admin') {
-    res.status(401);
-    throw new Error('Not authorized to delete products');
-  }
-
-  await product.remove();
+  await Product.findByIdAndDelete(req.params.id);
   res.json({ id: req.params.id });
 });
 
@@ -102,13 +99,7 @@ const updateStock = asyncHandler(async (req, res) => {
 
   if (!product) {
     res.status(404);
-    throw new Error('Product not found');
-  }
-
-  // Check if user has permission to update stock for this gym
-  if (req.user.role !== 'admin' && gym !== req.user.assignedGym) {
-    res.status(401);
-    throw new Error('Not authorized to update stock for this gym');
+    throw new Error('Producto no encontrado');
   }
 
   const currentStock = product.stock.get(gym) || 0;
