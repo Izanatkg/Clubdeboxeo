@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = '/api/students/';
+const API_URL = process.env.NODE_ENV === 'production' ? 'https://club-de-boxeo-parra.onrender.com/api/students/' : '/api/students/';
 
 // Get all students
 const getStudents = async (token, filters = {}) => {

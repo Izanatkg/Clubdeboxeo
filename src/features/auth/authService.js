@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = '/api/users/';
+const API_URL = process.env.NODE_ENV === 'production' ? 'https://club-de-boxeo-parra.onrender.com/api/users/' : '/api/users/';
 
 // Register user
 const register = async (userData) => {
