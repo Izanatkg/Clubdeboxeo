@@ -89,9 +89,10 @@ export const studentSlice = createSlice({
       .addCase(getStudents.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isError = false;
-        state.isSuccess = false;
-        state.students = action.payload;
-        state.total = action.payload.length;
+        state.isSuccess = true;
+        state.students = Array.isArray(action.payload) ? action.payload : [];
+        state.total = state.students.length;
+        state.message = '';
       })
       .addCase(getStudents.rejected, (state, action) => {
         state.isLoading = false;

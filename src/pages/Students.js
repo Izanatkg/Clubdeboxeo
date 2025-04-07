@@ -38,7 +38,7 @@ function Students() {
 
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
-  const { students, isLoading, isError, message } = useSelector(
+  const { students = [], isLoading, isError, message } = useSelector(
     (state) => state.students
   );
 

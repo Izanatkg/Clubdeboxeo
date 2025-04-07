@@ -16,7 +16,9 @@ import {
 import { Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 
-function DataTable({ rows, columns, loading, onDelete, onEdit }) {
+function DataTable({ rows = [], columns, loading, onDelete, onEdit }) {
+  // Asegurarse de que rows sea siempre un array
+  const safeRows = Array.isArray(rows) ? rows : [];
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const { user } = useSelector((state) => state.auth);
@@ -45,7 +47,7 @@ function DataTable({ rows, columns, loading, onDelete, onEdit }) {
     );
   }
 
-  if (!rows.length) {
+  if (!safeRows.length) {
     return (
       <Box
         sx={{
