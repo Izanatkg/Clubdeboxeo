@@ -90,7 +90,7 @@ export const studentSlice = createSlice({
         state.isLoading = false;
         state.isError = false;
         state.isSuccess = true;
-        state.students = Array.isArray(action.payload) ? action.payload : [];
+        state.students = action.payload || [];
         state.total = state.students.length;
         state.message = '';
       })
@@ -99,6 +99,8 @@ export const studentSlice = createSlice({
         state.isError = true;
         state.isSuccess = false;
         state.message = action.payload;
+        state.students = [];
+        state.total = 0;
       })
       .addCase(createStudent.pending, (state) => {
         state.isLoading = true;

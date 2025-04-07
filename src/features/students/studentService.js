@@ -11,8 +11,13 @@ const getStudents = async (token, filters = {}) => {
     params: filters,
   };
 
-  const response = await axios.get(API_URL, config);
-  return response.data;
+  try {
+    const response = await axios.get(API_URL, config);
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (error) {
+    console.error('Error fetching students:', error);
+    return [];
+  }
 };
 
 // Create new student
